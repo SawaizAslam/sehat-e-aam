@@ -45,7 +45,7 @@ def _resolve_src() -> bool:
 
 
 def _load_env_file() -> None:
-    default_env = "/Volumes/main/sehat/data/sehat.env"
+    default_env = "/Volumes/workspace/sehat/data/sehat.env"
     env_file = os.environ.get("SEHAT_ENV_FILE", default_env)
     if not Path(env_file).exists():
         return

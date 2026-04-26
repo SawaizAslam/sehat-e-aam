@@ -50,14 +50,50 @@ project, including `databricks/notebooks/`, `databricks/app/`, and `src/sehat/`.
 
 ### Step 2 — Upload the dataset
 
-1. **Catalog** sidebar → `main` → **Create schema** → name it `sehat`.
-2. Inside `main.sehat` → **Create volume** → managed volume → name `data`.
-3. Inside `main.sehat.data` → **Create directory** → `raw`.
+You have two options.
+
+#### Option A — UI upload
+
+1. **Catalog** sidebar → `workspace` → **Create schema** → name it `sehat`.
+2. Inside `workspace.sehat` → **Create volume** → managed volume → name `data`.
+3. Inside `workspace.sehat.data` → **Create directory** → `raw`.
 4. Inside `raw` → **Upload to this volume** → drop your CSV.
 5. Rename the uploaded file to `facilities.csv`.
 
-(Notebook `00_setup` will create the schema/volume automatically if you
-skipped 1-3, but you still need to upload the CSV.)
+> If the **Upload to this volume** button is missing or the upload silently
+> fails (a known Free Edition quirk for files >1MB), use Option B instead.
+
+#### Option B — CLI upload (works for the Free Edition 10MB+ case)
+
+```powershell
+# 1. Install the CLI once
+winget install Databricks.DatabricksCLI
+
+# 2. Authenticate (opens a browser, click Allow)
+databricks auth login `
+  --host https://<your-workspace>.cloud.databricks.com `
+  --profile sehat
+
+# 3. Create the UC schema + volume
+databricks --profile sehat schemas create sehat workspace
+databricks --profile sehat volumes create workspace sehat data MANAGED
+
+# 4. Upload the CSV (use --overwrite if you re-upload)
+databricks --profile sehat fs cp `
+  "<path-to-your-csv>" `
+  "dbfs:/Volumes/workspace/sehat/data/raw/facilities.csv" `
+  --overwrite
+
+# 5. Verify
+databricks --profile sehat fs ls dbfs:/Volumes/workspace/sehat/data/raw
+```
+
+(Notebook `00_setup` will skip schema/volume creation if they already exist,
+so option B is non-destructive.)
+
+> Free Edition uses the `workspace` catalog by default (you cannot create new
+> catalogs without account-admin rights). On paid tiers, edit the `CATALOG`
+> constant in the notebooks and `app.yaml` to use `main`.
 
 ### Step 3 — Run the setup notebook
 
@@ -89,7 +125,7 @@ and re-run only the extract / trust / index / deserts steps.
 You will end up with these files inside the Volume:
 
 ```
-/Volumes/main/sehat/data/
+/Volumes/workspace/sehat/data/
 ├── raw/facilities.csv
 ├── lakehouse/
 │   ├── facilities_bronze.parquet
@@ -200,14 +236,14 @@ rather use it instead of FAISS:
    ```python
    from databricks.vector_search.client import VectorSearchClient
    import pandas as pd
-   df = pd.read_parquet("/Volumes/main/sehat/data/lakehouse/gold/facilities/data.parquet")
+   df = pd.read_parquet("/Volumes/workspace/sehat/data/lakehouse/facilities_gold.parquet")
    # write to a Delta table the index can sync against
-   spark.createDataFrame(df).write.mode("overwrite").saveAsTable("main.sehat.gold_facilities")
+   spark.createDataFrame(df).write.mode("overwrite").saveAsTable("workspace.sehat.gold_facilities")
    client = VectorSearchClient()
    client.create_delta_sync_index(
        endpoint_name="sehat-vs",
-       index_name="main.sehat.facility_index",
-       source_table_name="main.sehat.gold_facilities",
+       index_name="workspace.sehat.facility_index",
+       source_table_name="workspace.sehat.gold_facilities",
        primary_key="facility_id",
        embedding_source_column="embedding_text",
        embedding_model_endpoint_name="databricks-gte-large-en",

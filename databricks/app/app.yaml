@@ -14,7 +14,7 @@ env:
 
   # Sidecar env file written by 00_setup.py
   - name: SEHAT_ENV_FILE
-    value: "/Volumes/main/sehat/data/sehat.env"
+    value: "/Volumes/workspace/sehat/data/sehat.env"
 
   # Uses the App's service principal for auth — no token needed.
   - name: LLM_BACKEND
@@ -30,7 +30,7 @@ env:
     value: "BAAI/bge-small-en-v1.5"
 
   - name: LAKEHOUSE_DIR
-    value: "/Volumes/main/sehat/data/lakehouse"
+    value: "/Volumes/workspace/sehat/data/lakehouse"
 
   - name: VECTOR_INDEX_DIR
-    value: "/Volumes/main/sehat/data/vector_index"
+    value: "/Volumes/workspace/sehat/data/vector_index"

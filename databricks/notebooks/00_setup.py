@@ -19,8 +19,11 @@
 
 # COMMAND ----------
 
-# Unity Catalog target (free edition: catalog "main" works; you can also create a new one)
-CATALOG = "main"
+# Unity Catalog target.
+# On Databricks Free Edition the default catalog is "workspace" (you cannot
+# create new catalogs without account-admin perms). On paid tiers you may
+# prefer "main".
+CATALOG = "workspace"
 SCHEMA = "sehat"
 VOLUME = "data"
 
@@ -72,7 +75,7 @@ print("Subdirs created: raw/, lakehouse/, vector_index/, mlruns/")
 # MAGIC
 # MAGIC In a separate browser tab:
 # MAGIC 1. Open **Catalog** in the sidebar.
-# MAGIC 2. Navigate to `main` > `sehat` > `data` > `raw`.
+# MAGIC 2. Navigate to `workspace` > `sehat` > `data` > `raw`.
 # MAGIC 3. Click **Upload to this volume** and drop your CSV file.
 # MAGIC 4. Rename it to `facilities.csv` (or update `RAW_FILENAME` below).
 # MAGIC
@@ -113,7 +116,7 @@ print(f"Found dataset: {RAW_DATASET_PATH} ({size_mb:.1f} MB)")
 
 # Re-declare config after kernel restart
 import os
-CATALOG = "main"
+CATALOG = "workspace"
 SCHEMA = "sehat"
 VOLUME = "data"
 LLM_ENDPOINT = "databricks-meta-llama-3-3-70b-instruct"

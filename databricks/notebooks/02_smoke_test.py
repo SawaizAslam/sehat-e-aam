@@ -23,7 +23,7 @@
 import os
 import sys
 
-CATALOG = "main"
+CATALOG = "workspace"  # Free Edition default; "main" on paid tiers
 SCHEMA = "sehat"
 VOLUME = "data"
 LLM_ENDPOINT = "databricks-meta-llama-3-3-70b-instruct"
