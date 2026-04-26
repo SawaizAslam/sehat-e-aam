@@ -71,25 +71,43 @@ print("Subdirs created: raw/, lakehouse/, vector_index/, mlruns/")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3 — Upload the dataset CSV
+# MAGIC ## Step 3 — Verify the dataset CSV is in the Volume
 # MAGIC
-# MAGIC In a separate browser tab:
-# MAGIC 1. Open **Catalog** in the sidebar.
-# MAGIC 2. Navigate to `workspace` > `sehat` > `data` > `raw`.
-# MAGIC 3. Click **Upload to this volume** and drop your CSV file.
-# MAGIC 4. Rename it to `facilities.csv` (or update `RAW_FILENAME` below).
+# MAGIC The pipeline expects your CSV at:
 # MAGIC
-# MAGIC Then re-run the next cell to confirm.
+# MAGIC ```
+# MAGIC /Volumes/workspace/sehat/data/raw/facilities.csv
+# MAGIC ```
+# MAGIC
+# MAGIC If you uploaded via the **Databricks CLI** (recommended for files >1 MB
+# MAGIC because the UI uploader is flaky on Free Edition):
+# MAGIC
+# MAGIC ```bash
+# MAGIC databricks fs cp "<local-csv>" \
+# MAGIC   dbfs:/Volumes/workspace/sehat/data/raw/facilities.csv --overwrite
+# MAGIC ```
+# MAGIC
+# MAGIC If you uploaded via the **UI**: Catalog sidebar → `workspace` → `sehat`
+# MAGIC → `data` → `raw` → **Upload to this volume** → drop your CSV → rename
+# MAGIC to `facilities.csv`.
+# MAGIC
+# MAGIC The next cell just confirms the file is there.
 
 # COMMAND ----------
 
 RAW_FILENAME = "facilities.csv"
-RAW_DATASET_PATH = f"{RAW_DIR}/{RAW_FILENAME}"
+RAW_DATASET_PATH = f"{RAW_DIR}/{RAW_FILENAME}"  # /Volumes/workspace/sehat/data/raw/facilities.csv
 
 if not os.path.exists(RAW_DATASET_PATH):
     raise FileNotFoundError(
-        f"Dataset not found at {RAW_DATASET_PATH}. "
-        f"Upload the CSV into the Volume {RAW_DIR} and rename it to {RAW_FILENAME}."
+        f"Dataset not found at {RAW_DATASET_PATH}.\n\n"
+        f"Upload it with the Databricks CLI:\n"
+        f"  databricks fs cp <local-csv> "
+        f"dbfs:/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/raw/{RAW_FILENAME} --overwrite\n\n"
+        f"Or via UI: Catalog -> {CATALOG} -> {SCHEMA} -> {VOLUME} -> raw -> "
+        f"Upload, then rename to {RAW_FILENAME}.\n\n"
+        f"List what's currently in the raw dir to debug:\n"
+        f"  %fs ls /Volumes/{CATALOG}/{SCHEMA}/{VOLUME}/raw"
     )
 size_mb = os.path.getsize(RAW_DATASET_PATH) / 1_048_576
 print(f"Found dataset: {RAW_DATASET_PATH} ({size_mb:.1f} MB)")
