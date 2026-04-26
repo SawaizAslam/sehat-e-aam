@@ -8,6 +8,7 @@ unchanged.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import contextmanager, nullcontext
 from typing import Any, Iterator
 
@@ -19,13 +20,55 @@ LOGGER = logging.getLogger(__name__)
 _INITIALISED = False
 
 
+def _resolve_experiment(name: str) -> str:
+    """Make ``name`` valid in the active MLflow backend.
+
+    On Databricks the tracking server requires experiment names to be absolute
+    workspace paths (e.g. ``/Users/<me>/sehat_e_aam``). Locally MLflow accepts
+    bare strings. ``MLFLOW_EXPERIMENT_NAME`` overrides everything.
+    """
+
+    override = os.environ.get("MLFLOW_EXPERIMENT_NAME")
+    if override:
+        return override
+
+    if name.startswith("/"):
+        return name
+
+    in_databricks = bool(
+        os.environ.get("DATABRICKS_RUNTIME_VERSION")
+        or os.environ.get("DATABRICKS_HOST")
+        or os.environ.get("DB_HOME")
+    )
+    if not in_databricks:
+        return name
+
+    user = (
+        os.environ.get("DATABRICKS_USER_NAME")
+        or os.environ.get("USER_NAME")
+        or os.environ.get("USER")
+    )
+    if user:
+        return f"/Users/{user}/{name}"
+
+    return f"/Shared/{name}"
+
+
 def init_tracing(experiment: str = "sehat_e_aam") -> None:
     global _INITIALISED
     if _INITIALISED:
         return
     settings = get_settings()
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    mlflow.set_experiment(experiment)
+    resolved = _resolve_experiment(experiment)
+    try:
+        mlflow.set_experiment(resolved)
+    except Exception as e:  # pragma: no cover - depends on backend
+        LOGGER.warning(
+            "MLflow set_experiment(%r) failed (%s); continuing without experiment.",
+            resolved,
+            e,
+        )
     _INITIALISED = True
 
 
