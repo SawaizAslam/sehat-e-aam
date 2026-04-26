@@ -26,6 +26,14 @@ vector_index/*
 mlruns/
 mlflow.db
 
+# Allow the small (~600KB) Silver/Gold parquets that ship with the
+# Hugging Face Space build context (see huggingface/space_app.py).
+!demo/facilities_silver.parquet
+!demo/facilities_gold.parquet
+
+# App deploy staging (built by databricks/scripts/stage_app.ps1)
+databricks/_app_deploy/
+
 # Editor
 .vscode/
 .idea/

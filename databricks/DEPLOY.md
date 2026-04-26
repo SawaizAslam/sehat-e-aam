@@ -1,17 +1,31 @@
 # Sehat-e-Aam · Databricks deployment
 
 This guide walks you through deploying the full Sehat-e-Aam pipeline + API on
-**Databricks Free Edition**. You will end up with a public-ish URL
-(workspace-scoped) that serves the four FastAPI endpoints.
+**Databricks Free Edition**, plus an optional public mirror so an external
+React frontend (Lovable, Vercel, …) can call the API without bouncing users
+through workspace login.
 
-> **Two deployment paths.**
+> **Three deployment paths.**
 > 1. **No-CLI / UI only** — works entirely in the Databricks browser, no
 >    install required on your laptop. Recommended for first-time users.
-> 2. **Asset Bundle (CLI)** — one command deploys notebooks + app. Requires
->    the Databricks CLI on any machine with internet (a colleague's laptop, a
->    free GitHub Codespace, or the Databricks Web Terminal itself).
+> 2. **Asset Bundle (CLI)** — one command deploys notebooks + Databricks App.
+>    Requires the Databricks CLI on any machine with internet (a colleague's
+>    laptop, a free GitHub Codespace, or the Databricks Web Terminal itself).
+> 3. **Public mirror on Hugging Face Spaces** — runs the same FastAPI code on
+>    a truly public URL with permissive CORS. Add this if a public-internet
+>    frontend needs to call the API.
 
-The two paths produce identical results.
+Paths 1 and 2 produce identical results. Path 3 is a separate, parallel deploy
+and is documented in **[Path 4](#path-4--public-mirror-on-hugging-face-spaces)**
+below (numbered 4 to keep the original Mosaic AI VS section as Path 3).
+
+> ### About authentication
+> Databricks Apps on Free Edition force workspace OAuth on every request.
+> A `*.databricksapps.com` URL is "published", but a Lovable-style React
+> frontend on the open internet **cannot call it directly** — every request
+> bounces to a Databricks login screen. If your frontend lives outside the
+> workspace, deploy **both** the Databricks App (Path 1 or 2) **and** the
+> public mirror (Path 4). They share the same `src/sehat/api/server.py`.
 
 ---
 
@@ -194,34 +208,75 @@ Free Edition apps auto-stop after 24h. You can also stop manually from the
 
 ## Path 2 — Asset Bundle (CLI)
 
-If you can run a single CLI command anywhere with internet:
+The bundle (`databricks.yml`) deploys the three notebooks **and** the
+Databricks App in one go.
 
-```bash
-# Install the CLI (one-time, requires internet but no Databricks workspace).
-# Linux / macOS:
-curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+### Step 1 — Install the CLI (one-time)
 
-# Windows (PowerShell):
-# winget install Databricks.DatabricksCLI
+```powershell
+# Windows (PowerShell)
+winget install Databricks.DatabricksCLI
 
-# Configure auth (one-time)
-databricks configure   # paste your workspace URL + a personal access token
-
-# From the repo root
-databricks bundle validate
-databricks bundle deploy --target dev
-databricks bundle run pipeline_job
+# Linux / macOS
+# curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
 ```
 
-The bundle deploys the three notebooks **and** the app in one go. After
-`bundle deploy` you'll see the App URL in the output.
+Verify with `databricks --version` (must be >=0.221, the version that
+supports `apps:` resources in bundles).
 
-You still need to upload the dataset CSV manually (Step 2 above) — bundles
+### Step 2 — Authenticate
+
+```powershell
+databricks auth login `
+  --host https://<your-workspace>.cloud.databricks.com `
+  --profile sehat
+```
+
+A browser opens — click **Allow**. The profile is saved to
+`~/.databrickscfg` so future commands just need `--profile sehat`.
+
+### Step 3 — Stage the self-contained app folder
+
+The bundle points at `databricks/_app_deploy/`, which is `databricks/app/`
+plus a copy of `src/sehat/` next to it. Recreate it with:
+
+```powershell
+# From repo root
+Remove-Item -Recurse -Force databricks/_app_deploy -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path databricks/_app_deploy | Out-Null
+Copy-Item -Recurse databricks/app/* databricks/_app_deploy/
+Copy-Item -Recurse src databricks/_app_deploy/
+```
+
+(The folder is gitignored on purpose — it's a build artefact, not source.)
+
+### Step 4 — Validate, deploy, run
+
+```powershell
+databricks bundle validate --profile sehat
+databricks bundle deploy   --profile sehat --target dev
+databricks bundle run pipeline_job --profile sehat
+```
+
+What this does:
+- Uploads notebooks to `/Workspace/Users/<you>/.bundle/sehat-e-aam/dev/files/`.
+- Creates / updates the `sehat-e-aam` Databricks App from
+  `databricks/_app_deploy/`.
+- Submits the three-task pipeline job (setup → pipeline → smoke).
+
+The App URL prints in the `bundle deploy` output — typically
+`https://sehat-e-aam-<hash>.cloud.databricks.com`. Workspace login required.
+
+You still need to upload the dataset CSV manually (Step 2 of Path 1) — bundles
 deliberately don't push large data files.
 
 > **Web Terminal alternative.** From the workspace UI: **Compute → Apps →
 > ...→ Web terminal**, then run `databricks bundle …` directly inside the
 > workspace. No local install needed.
+
+> **Free Edition gotcha.** `databricks.yml` defaults `catalog` to `workspace`
+> (the only catalog you can write to without account-admin rights). On paid
+> tiers, override with `--var catalog=main`.
 
 ---
 
@@ -257,6 +312,122 @@ rather use it instead of FAISS:
 
 ---
 
+## Path 4 — Public mirror on Hugging Face Spaces
+
+Required when an **external** React frontend (Lovable, Vercel, anything
+outside the Databricks workspace) needs to call the API. Runs the same
+FastAPI code (`src/sehat/api/server.py`) on a truly public URL.
+
+End state:
+- `https://<your-hf-username>-sehat-e-aam.hf.space` — open, CORS `*`
+- LLM still calls Databricks Foundation Model API
+  (`databricks-meta-llama-3-3-70b-instruct`) via a `DATABRICKS_TOKEN` Space
+  secret, so the "powered by Databricks" story is end-to-end.
+
+What ships in the Docker image:
+- `src/sehat/` (FastAPI server + pipeline)
+- `demo/facilities_silver.parquet` + `demo/facilities_gold.parquet`
+  (~600 KB total, generated by the Databricks pipeline run)
+- `huggingface/space_app.py` — bootstraps env vars, rebuilds the FAISS index
+  and the medical-deserts aggregate, then runs uvicorn.
+
+### Step 1 — Generate a Databricks personal access token
+
+1. Workspace **Settings → Developer → Access tokens → Generate new token**.
+2. Lifetime: 90 days (or whatever your demo window is).
+3. Copy the token now (you cannot view it again).
+
+### Step 2 — Create the Space
+
+1. https://huggingface.co/new-space
+2. Owner: your username. Name: `sehat-e-aam`. License: MIT.
+3. **SDK: Docker → Blank Docker template**.
+4. Hardware: `cpu-basic` (free, 16 GB RAM, 2 vCPU). No upgrade needed.
+5. Visibility: **Public**.
+6. Click **Create Space**. You'll get a Git URL like
+   `https://huggingface.co/spaces/<you>/sehat-e-aam`.
+
+### Step 3 — Add Space secrets / variables
+
+In the new Space → **Settings → Variables and secrets**:
+
+| Type     | Key                | Value                                          |
+| -------- | ------------------ | ---------------------------------------------- |
+| Variable | `DATABRICKS_HOST`  | `https://<your-workspace>.cloud.databricks.com` |
+| Secret   | `DATABRICKS_TOKEN` | the token from Step 1                          |
+
+(Optional: also set `LLM_MODEL` if your workspace has a different endpoint
+name; defaults to `databricks-meta-llama-3-3-70b-instruct`.)
+
+### Step 4 — Push the repo to the Space
+
+Pick whichever of A/B suits you:
+
+#### A — Push the whole repo as the Space (simplest)
+
+```powershell
+# From repo root
+git remote add hf https://huggingface.co/spaces/<your-hf-username>/sehat-e-aam
+git push hf main
+```
+
+The repo's root `Dockerfile` and the HF frontmatter at the top of `README.md`
+make HF Spaces auto-detect everything. Build takes ~4-6 min the first time
+(faiss-cpu wheel + sentence-transformers).
+
+#### B — Push only the deploy artefacts (cleaner if your repo is private)
+
+```powershell
+git clone https://huggingface.co/spaces/<your-hf-username>/sehat-e-aam space-repo
+cd space-repo
+
+# Copy only what the image needs
+Copy-Item -Recurse ../src .
+Copy-Item -Recurse ../huggingface .
+Copy-Item ../Dockerfile .
+Copy-Item ../README.md .
+New-Item -ItemType Directory -Force -Path demo | Out-Null
+Copy-Item ../demo/facilities_silver.parquet demo/
+Copy-Item ../demo/facilities_gold.parquet   demo/
+
+git add -A
+git commit -m "Initial Sehat-e-Aam Space"
+git push origin main
+```
+
+### Step 5 — Watch the build, hit the endpoints
+
+In the Space → **Logs** tab. You'll see:
+```
+Stage: Building → Running
+Staged facilities_silver.parquet -> ...
+Staged facilities_gold.parquet -> ...
+Embedding 565 facilities (local backend)...
+:white_check_mark: FAISS index built ...
+Building medical-deserts aggregate from Gold...
+Starting uvicorn on 0.0.0.0:7860
+```
+
+When status flips to **Running**, open:
+- `https://<you>-sehat-e-aam.hf.space/docs` — Swagger UI
+- `https://<you>-sehat-e-aam.hf.space/health` — should be fully `true`s
+
+Point your Lovable / external frontend at that base URL. CORS is already
+`*` in `src/sehat/api/server.py`.
+
+### What it costs
+
+| | Free tier limit | Realistic usage |
+| --- | --- | --- |
+| HF Spaces (cpu-basic) | unlimited build time, sleeps after 48h idle | $0 |
+| Databricks Foundation Model API | daily token cap on Free Edition | ~1500 prompt + 500 completion tokens per `/api/query` call |
+
+If you hit the daily token cap, the Space's `/health` keeps working but
+`/api/query` will return a `LLMError`. Wait until the next UTC day or upgrade
+to a paid Databricks tier.
+
+---
+
 ## Troubleshooting
 
 | Symptom                                      | Fix                                                                                                                |
@@ -268,3 +439,6 @@ rather use it instead of FAISS:
 | Pipeline notebook crashes on `faiss-cpu`    | Restart the kernel and re-run the `%pip install` cell. faiss wheels need a clean import.                            |
 | `gold_ready: false` from `/health`          | The App is reading from the wrong Volume path. Match `LAKEHOUSE_DIR` in `app.yaml` to your `00_setup.py` constants. |
 | App auto-stopped after 24h                  | Free Edition behaviour. Click **Start** in the Apps screen — the index/data persist on the Volume so it just resumes. |
+| HF Space build fails on `faiss-cpu`         | The image already installs `build-essential` and `libgomp1`. Re-run the build. If still failing, pin `faiss-cpu==1.8.0` in `huggingface/requirements.txt`. |
+| HF Space `/api/query` returns 5xx           | Check Space **Logs** for `LLMError`. Most often `DATABRICKS_TOKEN` was not set, or the workspace's daily token cap is exhausted. |
+| HF Space takes 30+ s on the first request   | Cold start is normal. The container caches the embedding model + FAISS index after the first boot, so subsequent restarts take ~5 s. |

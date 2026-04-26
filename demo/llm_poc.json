@@ -1,0 +1,207 @@
+[
+  {
+    "facility_id": "3c5d8b1516ead89bdcd39116c2b5d56008b4f021bf0eb4a6ddb253b9dbb1bb24",
+    "name": "A3r Advance Physiotherapy Chiropractic Clinic",
+    "city": "Ahmedabad",
+    "state": "Gujarat",
+    "facility_type": "clinic",
+    "trust_score": 1.0,
+    "confidence_overall": 0.713,
+    "llm_call": {
+      "endpoint": "databricks-meta-llama-3-3-70b-instruct (Databricks Foundation Model API)",
+      "prompt_tokens": 1102,
+      "completion_tokens": 431,
+      "latency_ms": 6218.955278396606
+    },
+    "structured_output": {
+      "facility_id": "3c5d8b1516ead89bdcd39116c2b5d56008b4f021bf0eb4a6ddb253b9dbb1bb24",
+      "icu": {
+        "present": "not_present",
+        "functional_status": "unknown",
+        "bed_count": null,
+        "neonatal_icu": "uncertain",
+        "source_text": "Outpatient chiropractic and physiotherapy services"
+      },
+      "ventilator": {
+        "present": "uncertain",
+        "count": null,
+        "reliability_note": null,
+        "source_text": null
+      },
+      "staff": {
+        "anesthesiologist": "unknown",
+        "surgeon": "unknown",
+        "general_physician": "unknown",
+        "specialist_types": [
+          "physiotherapist",
+          "chiropractor"
+        ],
+        "total_doctor_count": null,
+        "source_text": null
+      },
+      "emergency": {
+        "emergency_care": "not_present",
+        "is_24_7": false,
+        "ambulance": "uncertain",
+        "trauma_capability": "uncertain",
+        "source_text": "Outpatient chiropractic and physiotherapy services"
+      },
+      "surgery": {
+        "general_surgery": "not_present",
+        "appendectomy": "uncertain",
+        "caesarean": "uncertain",
+        "orthopedic": "uncertain",
+        "cardiac": "uncertain",
+        "source_text": "Outpatient chiropractic and physiotherapy services"
+      },
+      "dialysis": {
+        "present": "uncertain",
+        "machine_count": null,
+        "source_text": null
+      },
+      "specialties_extracted": [
+        "familyMedicine",
+        "physicalMedicineAndRehabilitation"
+      ],
+      "extraction_notes": "The facility seems to be a physiotherapy and chiropractic clinic, and does not provide any information about emergency care, surgery, or other medical specialties.",
+      "raw_text_used": "A3r Advance Physiotherapy Chiropractic Clinic | Physiotherapy and chiropractic clinic located in South Bopal, Ahmedabad, India."
+    }
+  },
+  {
+    "facility_id": "5795f8f74b7f955016f3c27b76ddbec6ccb1cef9292c3faf658a94b100563d87",
+    "name": "Aarzu Speech & Hearing Clinic",
+    "city": "Zirakpur",
+    "state": "Punjab",
+    "facility_type": "clinic",
+    "trust_score": 1.0,
+    "confidence_overall": 0.713,
+    "llm_call": {
+      "endpoint": "databricks-meta-llama-3-3-70b-instruct (Databricks Foundation Model API)",
+      "prompt_tokens": 1158,
+      "completion_tokens": 415,
+      "latency_ms": 6111.2000942230225
+    },
+    "structured_output": {
+      "facility_id": "5795f8f74b7f955016f3c27b76ddbec6ccb1cef9292c3faf658a94b100563d87",
+      "icu": {
+        "present": "not_present",
+        "functional_status": "unknown",
+        "bed_count": null,
+        "neonatal_icu": "not_present",
+        "source_text": "Outpatient clinic offering audiology and speech therapy services"
+      },
+      "ventilator": {
+        "present": "uncertain",
+        "count": null,
+        "reliability_note": null,
+        "source_text": null
+      },
+      "staff": {
+        "anesthesiologist": "unknown",
+        "surgeon": "unknown",
+        "general_physician": "unknown",
+        "specialist_types": [
+          "Speech Therapist",
+          "Audiologist"
+        ],
+        "total_doctor_count": null,
+        "source_text": "Number of Employees: 6-20"
+      },
+      "emergency": {
+        "emergency_care": "uncertain",
+        "is_24_7": false,
+        "ambulance": "uncertain",
+        "trauma_capability": "uncertain",
+        "source_text": null
+      },
+      "surgery": {
+        "general_surgery": "not_present",
+        "appendectomy": "not_present",
+        "caesarean": "not_present",
+        "orthopedic": "not_present",
+        "cardiac": "not_present",
+        "source_text": "Outpatient clinic offering audiology and speech therapy services"
+      },
+      "dialysis": {
+        "present": "not_present",
+        "machine_count": null,
+        "source_text": "Outpatient clinic offering audiology and speech therapy services"
+      },
+      "specialties_extracted": [
+        "Speech Therapy",
+        "Audiology"
+      ],
+      "extraction_notes": "The facility is a speech and hearing clinic and does not provide general medical or surgical services.",
+      "raw_text_used": "Aarzu Speech & Hearing Clinic | Speech & Hearing clinic in Zirakpur, Punjab, India."
+    }
+  },
+  {
+    "facility_id": "a6cfdbac86ead12975ecf667448b0cd625d9f083dd1f995e971e6ea09131e98f",
+    "name": "A.S. Dentistry Clinic",
+    "city": "Salem",
+    "state": "Tamil Nadu",
+    "facility_type": "clinic",
+    "trust_score": 1.0,
+    "confidence_overall": 0.713,
+    "llm_call": {
+      "endpoint": "databricks-meta-llama-3-3-70b-instruct (Databricks Foundation Model API)",
+      "prompt_tokens": 1155,
+      "completion_tokens": 430,
+      "latency_ms": 5751.710891723633
+    },
+    "structured_output": {
+      "facility_id": "a6cfdbac86ead12975ecf667448b0cd625d9f083dd1f995e971e6ea09131e98f",
+      "icu": {
+        "present": "not_present",
+        "functional_status": "unknown",
+        "bed_count": null,
+        "neonatal_icu": "uncertain",
+        "source_text": "Specialized oral and maxillofacial clinic"
+      },
+      "ventilator": {
+        "present": "uncertain",
+        "count": null,
+        "reliability_note": null,
+        "source_text": null
+      },
+      "staff": {
+        "anesthesiologist": "unknown",
+        "surgeon": "visiting",
+        "general_physician": "unknown",
+        "specialist_types": [
+          "oral and maxillofacial surgeon",
+          "dentist"
+        ],
+        "total_doctor_count": null,
+        "source_text": "A.S.Dentistry provides routine dental check-ups to cosmetic dentistry & maxillofacial care"
+      },
+      "emergency": {
+        "emergency_care": "not_present",
+        "is_24_7": false,
+        "ambulance": "uncertain",
+        "trauma_capability": "uncertain",
+        "source_text": "Operates by appointment only"
+      },
+      "surgery": {
+        "general_surgery": "uncertain",
+        "appendectomy": "uncertain",
+        "caesarean": "not_present",
+        "orthopedic": "uncertain",
+        "cardiac": "uncertain",
+        "source_text": "Performs oral and maxillofacial surgery"
+      },
+      "dialysis": {
+        "present": "not_present",
+        "machine_count": null,
+        "source_text": "Outpatient dental clinic"
+      },
+      "specialties_extracted": [
+        "dentistry",
+        "oral and maxillofacial surgery",
+        "family medicine"
+      ],
+      "extraction_notes": "The facility is specialized in oral and maxillofacial care and does not provide general medical services.",
+      "raw_text_used": "A.S. Dentistry Clinic | A.S.Dentistry provides"
+    }
+  }
+]

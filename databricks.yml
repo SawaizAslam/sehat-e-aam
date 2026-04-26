@@ -15,7 +15,10 @@ bundle:
 variables:
   catalog:
     description: Unity Catalog used for the schema and Volume.
-    default: main
+    # Free Edition uses the `workspace` catalog (you cannot create new catalogs
+    # without account-admin rights). On paid tiers, override with
+    # `--var catalog=main` or set the workspace's default catalog.
+    default: workspace
   schema:
     description: UC schema name.
     default: sehat
@@ -49,13 +52,15 @@ resources:
     sehat_app:
       name: sehat-e-aam
       description: Sehat-e-Aam Healthcare Intelligence API (FastAPI)
-      source_code_path: ./databricks/app
+      # `_app_deploy/` is a self-contained copy of `app/` plus `src/sehat/`,
+      # so the App resolves the package without depending on the Git folder
+      # layout. It is gitignored locally but still uploaded by the bundle.
+      source_code_path: ./databricks/_app_deploy
 
 targets:
   dev:
     mode: development
     default: true
-    workspace:
-      # Override at deploy time with --workspace-host or via the CLI profile.
-      # Free Edition: https://<your-workspace>.cloud.databricks.com
-      host: ${var.DATABRICKS_HOST}
+    # Workspace host is read from the active CLI profile
+    # (`databricks auth login --profile sehat`). No need to hard-code it
+    # here — that lets the same bundle work for any user / workspace.

@@ -1,0 +1,22 @@
+{
+  "run_name": "sehat-e-aam pipeline+smoke (CLI)",
+  "tasks": [
+    {
+      "task_key": "pipeline",
+      "notebook_task": {
+        "notebook_path": "/Users/sawaizkhowaja@gmail.com/sehat-e-aam/databricks/notebooks/01_pipeline",
+        "source": "WORKSPACE"
+      },
+      "max_retries": 0
+    },
+    {
+      "task_key": "smoke",
+      "depends_on": [{ "task_key": "pipeline" }],
+      "notebook_task": {
+        "notebook_path": "/Users/sawaizkhowaja@gmail.com/sehat-e-aam/databricks/notebooks/02_smoke_test",
+        "source": "WORKSPACE"
+      },
+      "max_retries": 0
+    }
+  ]
+}

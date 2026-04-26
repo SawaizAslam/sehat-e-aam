@@ -1,3 +1,22 @@
+---
+title: Sehat-e-Aam
+emoji: 🩺
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+short_description: Public FastAPI mirror of the Sehat-e-Aam API.
+---
+
+<!--
+  The YAML frontmatter above is read by Hugging Face Spaces when this repo is
+  pushed as a Space (Docker SDK). On GitHub it renders as a code block, which
+  we accept as a small cosmetic cost for the dual-publish flow described in
+  databricks/DEPLOY.md (Path 4).
+-->
+
 # Sehat-e-Aam
 
 **Agentic Healthcare Intelligence System for Indian healthcare facilities.**
