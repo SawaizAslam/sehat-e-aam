@@ -1,0 +1,36 @@
+command:
+  - uvicorn
+  - app:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+
+env:
+  # Where the repo lives in the workspace (parent of `src/sehat/`).
+  # Edit if you uploaded the repo to a different path.
+  - name: SEHAT_PROJECT_ROOT
+    value: "/Workspace/Users/${DATABRICKS_USER_NAME}/sehat-e-aam"
+
+  # Sidecar env file written by 00_setup.py
+  - name: SEHAT_ENV_FILE
+    value: "/Volumes/main/sehat/data/sehat.env"
+
+  # Uses the App's service principal for auth — no token needed.
+  - name: LLM_BACKEND
+    value: "databricks"
+
+  - name: LLM_MODEL
+    value: "databricks-meta-llama-3-3-70b-instruct"
+
+  - name: EMBEDDING_BACKEND
+    value: "local"
+
+  - name: EMBEDDING_MODEL
+    value: "BAAI/bge-small-en-v1.5"
+
+  - name: LAKEHOUSE_DIR
+    value: "/Volumes/main/sehat/data/lakehouse"
+
+  - name: VECTOR_INDEX_DIR
+    value: "/Volumes/main/sehat/data/vector_index"

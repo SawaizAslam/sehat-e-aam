@@ -1,0 +1,61 @@
+bundle:
+  name: sehat-e-aam
+
+# Optional: Sehat-e-Aam Asset Bundle for one-command deploy.
+#
+# Usage (from a machine with the Databricks CLI installed):
+#
+#   databricks bundle validate
+#   databricks bundle deploy   --target dev
+#   databricks bundle run pipeline_job
+#
+# If you can't install the CLI on your machine, you can still deploy via the
+# Workspace UI — see databricks/DEPLOY.md.
+
+variables:
+  catalog:
+    description: Unity Catalog used for the schema and Volume.
+    default: main
+  schema:
+    description: UC schema name.
+    default: sehat
+  volume:
+    description: UC Volume name (holds raw CSV + parquet artefacts).
+    default: data
+  llm_endpoint:
+    description: Foundation Model API endpoint name.
+    default: databricks-meta-llama-3-3-70b-instruct
+
+resources:
+  jobs:
+    pipeline_job:
+      name: "[sehat] full pipeline"
+      tasks:
+        - task_key: setup
+          notebook_task:
+            notebook_path: ./databricks/notebooks/00_setup.py
+        - task_key: pipeline
+          depends_on:
+            - task_key: setup
+          notebook_task:
+            notebook_path: ./databricks/notebooks/01_pipeline.py
+        - task_key: smoke
+          depends_on:
+            - task_key: pipeline
+          notebook_task:
+            notebook_path: ./databricks/notebooks/02_smoke_test.py
+
+  apps:
+    sehat_app:
+      name: sehat-e-aam
+      description: Sehat-e-Aam Healthcare Intelligence API (FastAPI)
+      source_code_path: ./databricks/app
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      # Override at deploy time with --workspace-host or via the CLI profile.
+      # Free Edition: https://<your-workspace>.cloud.databricks.com
+      host: ${var.DATABRICKS_HOST}
