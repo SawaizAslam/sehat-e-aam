@@ -24,7 +24,7 @@ from rich.table import Table
 
 from ..config import Settings, get_settings
 from ..schemas import FacilityType
-from ..storage import write_parquet
+from ..storage import read_parquet, write_parquet
 
 LOGGER = logging.getLogger(__name__)
 console = Console()
@@ -180,7 +180,7 @@ def run_ingest(settings: Settings | None = None) -> pd.DataFrame:
 # Convenience: load Bronze for downstream stages
 def load_bronze(settings: Settings | None = None) -> pd.DataFrame:
     s = settings or get_settings()
-    return pd.read_parquet(s.bronze_path)
+    return read_parquet(s.bronze_path)
 
 
 __all__ = ["run_ingest", "load_bronze"]

@@ -32,7 +32,7 @@ from ..schemas import (
     StaffType,
     TrustFlag,
 )
-from ..storage import parquet_exists, write_parquet
+from ..storage import parquet_exists, read_parquet, write_parquet
 from ..tracing import init_tracing, log_metrics, run
 
 LOGGER = logging.getLogger(__name__)
@@ -306,12 +306,30 @@ def compute_confidence(
     )
 
 
+def _clean_str(value: Any) -> str | None:
+    """Coerce pandas/parquet missing values (``pd.NA``, ``NaN``, ``None``) to None.
+
+    Avoids ``TypeError: boolean value of NA is ambiguous`` raised by Python's
+    ``or`` operator on ``pd.NA`` when it appears as a column value.
+    """
+
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    return text or None
+
+
 def build_embedding_text(
     *,
     name: str,
-    city: str | None,
-    state: str | None,
-    pin_code: str | None,
+    city: Any,
+    state: Any,
+    pin_code: Any,
     facility_type: FacilityType,
     extraction: dict[str, Any],
     trust_score: float,
@@ -322,9 +340,13 @@ def build_embedding_text(
     surgery_status = (extraction.get("surgery") or {}).get("general_surgery", "uncertain")
     raw_used = (extraction.get("raw_text_used") or "")[:300]
 
+    city_s = _clean_str(city) or "Unknown city"
+    state_s = _clean_str(state) or "Unknown state"
+    pin_s = _clean_str(pin_code) or "unknown"
+
     parts = [
         f"Facility: {name}.",
-        f"Location: {city or 'Unknown city'}, {state or 'Unknown state'}, PIN {pin_code or 'unknown'}.",
+        f"Location: {city_s}, {state_s}, PIN {pin_s}.",
         f"Type: {facility_type.value}.",
         f"Specialties: {', '.join(specialties) if specialties else 'none extracted'}.",
         f"ICU: {icu_status}. Emergency: {emergency_status}. Surgery: {surgery_status}.",
@@ -348,8 +370,8 @@ def run_trust_scoring(settings: Settings | None = None) -> pd.DataFrame:
     if not parquet_exists(s.silver_path):
         raise FileNotFoundError("Silver parquet missing; run `sehat extract`.")
 
-    bronze = pd.read_parquet(s.bronze_path)
-    silver = pd.read_parquet(s.silver_path)
+    bronze = read_parquet(s.bronze_path)
+    silver = read_parquet(s.silver_path)
 
     merged = silver.merge(bronze, on="facility_id", how="inner", suffixes=("", "_bronze"))
     if merged.empty:
@@ -359,8 +381,11 @@ def run_trust_scoring(settings: Settings | None = None) -> pd.DataFrame:
 
     with run("trust_scoring", silver_rows=len(silver), bronze_rows=len(bronze)):
         for _, row in merged.iterrows():
+            extraction_raw = row.get("extraction_json")
+            if pd.isna(extraction_raw) or not extraction_raw:
+                continue
             try:
-                extraction = json.loads(row["extraction_json"]) if row["extraction_json"] else {}
+                extraction = json.loads(extraction_raw)
             except json.JSONDecodeError:
                 LOGGER.warning("Bad JSON for %s; skipping.", row["facility_id"])
                 continue
@@ -369,19 +394,22 @@ def run_trust_scoring(settings: Settings | None = None) -> pd.DataFrame:
             n_doctors = row.get("numberDoctors")
             n_doctors = int(n_doctors) if pd.notna(n_doctors) else None
 
+            ctl_raw = row.get("composite_text_length")
+            ctl = int(ctl_raw) if pd.notna(ctl_raw) else 0
+
             trust_score, flags = apply_trust_rules(
                 extraction,
                 facility_type=facility_type,
                 number_doctors=n_doctors,
-                composite_text_length=int(row.get("composite_text_length") or 0),
+                composite_text_length=ctl,
             )
             confidence = compute_confidence(
                 extraction,
                 flags=flags,
-                composite_text_length=int(row.get("composite_text_length") or 0),
+                composite_text_length=ctl,
             )
             embedding_text = build_embedding_text(
-                name=str(row.get("name") or ""),
+                name=_clean_str(row.get("name")) or "",
                 city=row.get("address_city"),
                 state=row.get("address_stateOrRegion"),
                 pin_code=row.get("address_zipOrPostcode"),
@@ -393,14 +421,14 @@ def run_trust_scoring(settings: Settings | None = None) -> pd.DataFrame:
             gold_records.append(
                 {
                     "facility_id": row["facility_id"],
-                    "name": row.get("name") or "",
-                    "address_city": row.get("address_city"),
-                    "address_state": row.get("address_stateOrRegion"),
-                    "address_zip": row.get("address_zipOrPostcode"),
+                    "name": _clean_str(row.get("name")) or "",
+                    "address_city": _clean_str(row.get("address_city")),
+                    "address_state": _clean_str(row.get("address_stateOrRegion")),
+                    "address_zip": _clean_str(row.get("address_zipOrPostcode")),
                     "latitude": float(row["latitude"]) if pd.notna(row.get("latitude")) else None,
                     "longitude": float(row["longitude"]) if pd.notna(row.get("longitude")) else None,
                     "facility_type": facility_type.value,
-                    "operator_type": row.get("operatorTypeId"),
+                    "operator_type": _clean_str(row.get("operatorTypeId")),
                     "extraction_json": json.dumps(extraction, ensure_ascii=False),
                     "trust_score": trust_score,
                     "trust_flags_json": json.dumps(

@@ -35,7 +35,7 @@ from ..config import Settings, get_settings
 from ..llm import LLMClient, LLMError
 from ..prompts import EXTRACTION_SYSTEM_PROMPT, EXTRACTION_USER_TEMPLATE
 from ..schemas import FacilityExtraction
-from ..storage import parquet_exists, upsert_parquet
+from ..storage import parquet_exists, read_parquet, upsert_parquet
 from ..tracing import init_tracing, log_metrics, run
 
 LOGGER = logging.getLogger(__name__)
@@ -125,13 +125,12 @@ def run_extract(
             f"Bronze parquet not found at {s.bronze_path}. Run `sehat ingest` first."
         )
 
-    bronze = pd.read_parquet(s.bronze_path)
+    bronze = read_parquet(s.bronze_path)
     bronze = bronze[bronze["composite_text"].astype(str).str.len() > 0].copy()
 
-    # Build set of already-processed IDs for resumability
     already: set[str] = set()
     if only_missing and parquet_exists(s.silver_path):
-        already = set(pd.read_parquet(s.silver_path)["facility_id"].astype(str).unique())
+        already = set(read_parquet(s.silver_path)["facility_id"].astype(str).unique())
         console.log(f"Resume: {len(already):,} already in Silver, will be skipped.")
 
     pending = bronze[~bronze["facility_id"].isin(already)]
@@ -142,7 +141,7 @@ def run_extract(
 
     if pending.empty:
         console.log(":white_check_mark: Nothing to extract.")
-        return pd.read_parquet(s.silver_path) if parquet_exists(s.silver_path) else pd.DataFrame()
+        return read_parquet(s.silver_path) if parquet_exists(s.silver_path) else pd.DataFrame()
 
     items = [
         _ExtractionInput(
@@ -220,7 +219,7 @@ def run_extract(
     console.log(
         f":white_check_mark: Extraction complete. ok={len(successes):,} fail={len(failures):,}"
     )
-    return pd.read_parquet(s.silver_path)
+    return read_parquet(s.silver_path)
 
 
 def _flush(results: list[_ExtractionResult], s: Settings) -> None:

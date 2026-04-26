@@ -19,7 +19,7 @@ import pandas as pd
 from rich.console import Console
 
 from ..config import Settings, get_settings
-from ..storage import parquet_exists
+from ..storage import parquet_exists, read_parquet
 
 LOGGER = logging.getLogger(__name__)
 console = Console()
@@ -115,7 +115,7 @@ class FacilityVectorIndex:
         if gold_df is None:
             if not parquet_exists(s.gold_path):
                 raise FileNotFoundError("Gold parquet missing; run `sehat trust` first.")
-            gold_df = pd.read_parquet(s.gold_path)
+            gold_df = read_parquet(s.gold_path)
 
         if gold_df.empty:
             raise ValueError("Gold table is empty; nothing to index.")
@@ -179,7 +179,7 @@ class FacilityVectorIndex:
         if not s.vector_index_path.exists() or not s.vector_meta_path.exists():
             raise FileNotFoundError("Vector index not built yet. Run `sehat index`.")
         self._index = faiss.read_index(str(s.vector_index_path))
-        self._meta = pd.read_parquet(s.vector_meta_path)
+        self._meta = read_parquet(s.vector_meta_path)
         self._embedder = _make_embedder(s)
 
     # -- query ---------------------------------------------------------------

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..config import get_settings
 from ..pipeline.reasoning import query_facilities
-from ..storage import duck, parquet_exists
+from ..storage import duck, parquet_exists, read_parquet
 
 LOGGER = logging.getLogger(__name__)
 
@@ -174,7 +174,7 @@ def api_get_desert_map(
     if not parquet_exists(s.deserts_path):
         raise HTTPException(503, "Deserts table not built. Run `sehat deserts` first.")
 
-    df = pd.read_parquet(s.deserts_path)
+    df = read_parquet(s.deserts_path)
     if state:
         df = df[df["state"].str.lower() == state.lower()]
     if high_risk_only:

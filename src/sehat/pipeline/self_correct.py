@@ -26,7 +26,7 @@ from ..config import Settings, get_settings
 from ..llm import LLMClient, LLMError
 from ..prompts import CORRECTOR_SYSTEM_PROMPT, VALIDATOR_SYSTEM_PROMPT
 from ..schemas import FacilityExtraction, FacilityType
-from ..storage import parquet_exists, upsert_parquet, write_parquet
+from ..storage import parquet_exists, read_parquet, upsert_parquet, write_parquet
 from ..tracing import init_tracing, run, span
 from .trust_score import apply_trust_rules, build_embedding_text, compute_confidence
 
@@ -159,8 +159,8 @@ def run_self_correction(settings: Settings | None = None) -> pd.DataFrame:
     if not parquet_exists(s.bronze_path):
         raise FileNotFoundError("Bronze parquet missing; run `sehat ingest` first.")
 
-    gold = pd.read_parquet(s.gold_path)
-    bronze = pd.read_parquet(s.bronze_path)[["facility_id", "composite_text"]]
+    gold = read_parquet(s.gold_path)
+    bronze = read_parquet(s.bronze_path)[["facility_id", "composite_text"]]
 
     pending = gold[gold["trust_score"] < s.correction_trigger_trust]
     pending = pending.merge(bronze, on="facility_id", how="left")
@@ -294,7 +294,7 @@ def run_self_correction(settings: Settings | None = None) -> pd.DataFrame:
         else:
             console.log("No corrections applied.")
 
-    return pd.read_parquet(s.gold_path)
+    return read_parquet(s.gold_path)
 
 
 __all__ = ["run_self_correction", "run_loop_for_record"]
