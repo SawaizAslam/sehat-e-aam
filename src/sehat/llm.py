@@ -126,6 +126,16 @@ class _OpenAIBackend:
 
 
 class _DatabricksBackend:
+    """Calls Databricks Foundation Model API.
+
+    Prefers the OpenAI-compatible client exposed by ``WorkspaceClient`` (newer
+    ``databricks-sdk`` versions), which natively supports ``response_format``
+    for JSON-mode output. Falls back to ``serving_endpoints.query`` without
+    server-side JSON-mode if that helper is not available — the prompts in
+    ``sehat.prompts`` already instruct the model to emit JSON, and
+    ``LLMResponse.parse_json`` strips markdown fences if needed.
+    """
+
     def __init__(self, settings: Settings) -> None:
         from databricks.sdk import WorkspaceClient
 
@@ -134,8 +144,16 @@ class _DatabricksBackend:
             kwargs["host"] = settings.databricks_host
         if settings.databricks_token:
             kwargs["token"] = settings.databricks_token
-        self._client = WorkspaceClient(**kwargs)
+        self._workspace = WorkspaceClient(**kwargs)
         self._model = settings.llm_model
+
+        self._openai_client = None
+        get_oai = getattr(self._workspace.serving_endpoints, "get_open_ai_client", None)
+        if callable(get_oai):
+            try:
+                self._openai_client = get_oai()
+            except Exception as e:  # pragma: no cover - depends on SDK / network
+                LOGGER.warning("get_open_ai_client() failed; using SDK query() instead: %s", e)
 
     def complete(
         self,
@@ -146,30 +164,98 @@ class _DatabricksBackend:
     ) -> LLMResponse:
         import time
 
+        if self._openai_client is not None:
+            return self._complete_via_openai(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                json_mode=json_mode,
+                start=time.time(),
+            )
+        return self._complete_via_sdk(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            start=time.time(),
+        )
+
+    def _complete_via_openai(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        json_mode: bool,
+        start: float,
+    ) -> LLMResponse:
+        import time
+
+        from openai import APIConnectionError, APIError, RateLimitError
+
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        try:
+            resp = self._openai_client.chat.completions.create(**kwargs)
+        except (RateLimitError, APIConnectionError) as e:
+            raise _RetryableLLMError(str(e)) from e
+        except APIError as e:
+            status = getattr(e, "status_code", 0)
+            if status in {408, 409, 429, 500, 502, 503, 504}:
+                raise _RetryableLLMError(str(e)) from e
+            # Some Databricks endpoints reject ``response_format``; retry once
+            # without it before bubbling up.
+            msg = str(e).lower()
+            if json_mode and ("unknown field" in msg or "response_format" in msg):
+                kwargs.pop("response_format", None)
+                try:
+                    resp = self._openai_client.chat.completions.create(**kwargs)
+                except APIError as e2:
+                    raise LLMError(f"Databricks (OpenAI-compat) error: {e2}") from e2
+            else:
+                raise LLMError(f"Databricks (OpenAI-compat) error: {e}") from e
+
+        latency_ms = (time.time() - start) * 1000
+        choice = resp.choices[0]
+        content = choice.message.content or ""
+        usage = resp.usage
+        return LLMResponse(
+            content=content,
+            prompt_tokens=usage.prompt_tokens if usage else 0,
+            completion_tokens=usage.completion_tokens if usage else 0,
+            latency_ms=latency_ms,
+            model=self._model,
+        )
+
+    def _complete_via_sdk(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        temperature: float,
+        max_tokens: int,
+        start: float,
+    ) -> LLMResponse:
+        import time
+
         from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
 
         sdk_messages = [
             ChatMessage(role=ChatMessageRole(m["role"]), content=m["content"])
             for m in messages
         ]
-        query_kwargs: dict[str, Any] = {
-            "name": self._model,
-            "messages": sdk_messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        if json_mode:
-            # Databricks Foundation Model API accepts response_format via extra_params
-            query_kwargs["extra_params"] = {"response_format": {"type": "json_object"}}
-
-        start = time.time()
         try:
-            try:
-                resp = self._client.serving_endpoints.query(**query_kwargs)
-            except TypeError:
-                # Older SDK versions do not accept ``extra_params``; retry without it.
-                query_kwargs.pop("extra_params", None)
-                resp = self._client.serving_endpoints.query(**query_kwargs)
+            resp = self._workspace.serving_endpoints.query(
+                name=self._model,
+                messages=sdk_messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
         except Exception as e:  # pragma: no cover - depends on remote
             msg = str(e).lower()
             if "rate" in msg or "429" in msg or "timeout" in msg or "503" in msg:
@@ -177,18 +263,14 @@ class _DatabricksBackend:
             raise LLMError(f"Databricks serving error: {e}") from e
         latency_ms = (time.time() - start) * 1000
 
-        # databricks-sdk returns a dict-like object; extract content defensively
         choices = resp.choices or []
         content = ""
         if choices:
-            msg = choices[0].message
-            content = (msg.content if msg else "") or ""
+            msg_obj = choices[0].message
+            content = (msg_obj.content if msg_obj else "") or ""
         usage = getattr(resp, "usage", None)
         prompt_tokens = getattr(usage, "prompt_tokens", 0) if usage else 0
         completion_tokens = getattr(usage, "completion_tokens", 0) if usage else 0
-
-        if json_mode:
-            content = content.strip()
 
         return LLMResponse(
             content=content,
