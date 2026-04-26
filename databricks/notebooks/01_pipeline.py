@@ -69,8 +69,15 @@ ENV_VARS = {
     "EXTRACT_MAX_WORKERS": "4",
     "EXTRACT_SAMPLE_LIMIT": "200",  # raise to 0 for full extraction
     "CORRECTION_TRIGGER_TRUST": "0.65",
-    "CORRECTION_SAMPLE_LIMIT": "100",
-    "MLFLOW_EXPERIMENT_NAME": f"/Users/{spark.sql('SELECT current_user()').first()[0]}/sehat-e-aam",
+    # Set to 0 for the demo deadline run: skips the (slow) Validator/Corrector
+    # LLM loop. The code path is fully implemented in
+    # src/sehat/pipeline/self_correct.py; raise this to e.g. 100 for a
+    # quality run.
+    "CORRECTION_SAMPLE_LIMIT": "0",
+    # Do not set MLFLOW_EXPERIMENT_NAME to the Git folder path (/.../sehat-e-aam):
+    # that path is a REPO node and experiment creation fails with RESOURCE_ALREADY_EXISTS.
+    # sehat.tracing resolves a safe path under .../mlflow-experiments/ and strips the
+    # runtime-injected MLFLOW_EXPERIMENT_NAME for you.
 }
 for k, v in ENV_VARS.items():
     os.environ[k] = v
