@@ -18,17 +18,23 @@ from .config import get_settings
 
 LOGGER = logging.getLogger(__name__)
 _INITIALISED = False
+_TRACING_OK = False
 
 
 def _resolve_experiment(name: str) -> str:
     """Make ``name`` valid in the active MLflow backend.
 
     On Databricks the tracking server requires experiment names to be absolute
-    workspace paths (e.g. ``/Users/<me>/sehat_e_aam``). Locally MLflow accepts
-    bare strings. ``MLFLOW_EXPERIMENT_NAME`` overrides everything.
+    workspace paths (e.g. ``/Users/<me>/mlflow-experiments/sehat_e_aam``).
+    Locally MLflow accepts bare strings. ``MLFLOW_EXPERIMENT_NAME`` overrides
+    everything.
+
+    We deliberately put the experiment in a sub-folder (``mlflow-experiments``)
+    so it never collides with a Git folder / Repo named the same as the
+    project at ``/Users/<me>/<project>``.
     """
 
-    override = os.environ.get("MLFLOW_EXPERIMENT_NAME")
+    override = os.environ.get("MLFLOW_EXPERIMENT_NAME_OVERRIDE")
     if override:
         return override
 
@@ -49,41 +55,63 @@ def _resolve_experiment(name: str) -> str:
         or os.environ.get("USER")
     )
     if user:
-        return f"/Users/{user}/{name}"
+        return f"/Users/{user}/mlflow-experiments/{name}"
 
-    return f"/Shared/{name}"
+    return f"/Shared/mlflow-experiments/{name}"
 
 
 def init_tracing(experiment: str = "sehat_e_aam") -> None:
-    global _INITIALISED
+    """Best-effort MLflow init.
+
+    On Databricks the workspace runtime auto-sets ``MLFLOW_EXPERIMENT_NAME``
+    to the executing notebook's workspace path, so MLflow falls back to that
+    when ``set_experiment`` fails — which itself fails when the notebook lives
+    inside a Git folder (REPO node), because MLflow can't create child
+    experiment nodes under a REPO. To stay robust we strip that env var and
+    rely solely on our explicit experiment path; if anything still fails we
+    fully disable tracing for the rest of the process.
+    """
+
+    global _INITIALISED, _TRACING_OK
     if _INITIALISED:
         return
-    settings = get_settings()
-    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-    resolved = _resolve_experiment(experiment)
-    try:
-        mlflow.set_experiment(resolved)
-    except Exception as e:  # pragma: no cover - depends on backend
-        LOGGER.warning(
-            "MLflow set_experiment(%r) failed (%s); continuing without experiment.",
-            resolved,
-            e,
-        )
     _INITIALISED = True
+
+    os.environ.pop("MLFLOW_EXPERIMENT_NAME", None)
+    os.environ.pop("MLFLOW_EXPERIMENT_ID", None)
+
+    settings = get_settings()
+    try:
+        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+        resolved = _resolve_experiment(experiment)
+        mlflow.set_experiment(resolved)
+        _TRACING_OK = True
+    except Exception as e:  # pragma: no cover - depends on backend
+        LOGGER.warning("MLflow init failed (%s); tracing disabled.", e)
+        _TRACING_OK = False
 
 
 @contextmanager
 def run(name: str, **params: Any) -> Iterator[Any]:
-    """Start an MLflow run with optional params, yield the active run."""
+    """Start an MLflow run if tracing is healthy, else yield a no-op."""
 
     init_tracing()
-    with mlflow.start_run(run_name=name) as active:
-        for k, v in params.items():
-            try:
-                mlflow.log_param(k, v)
-            except Exception:  # pragma: no cover - mlflow non-fatal
-                LOGGER.debug("Failed to log param %s=%s", k, v)
-        yield active
+    if not _TRACING_OK:
+        with nullcontext(None) as s:
+            yield s
+        return
+    try:
+        with mlflow.start_run(run_name=name) as active:
+            for k, v in params.items():
+                try:
+                    mlflow.log_param(k, v)
+                except Exception:  # pragma: no cover - mlflow non-fatal
+                    LOGGER.debug("Failed to log param %s=%s", k, v)
+            yield active
+    except Exception as e:  # pragma: no cover - server-side failures
+        LOGGER.warning("mlflow.start_run failed (%s); proceeding without it.", e)
+        with nullcontext(None) as s:
+            yield s
 
 
 @contextmanager
@@ -91,16 +119,22 @@ def span(name: str, **attributes: Any) -> Iterator[Any]:
     """Best-effort span. Falls back to a no-op if MLflow tracing is unavailable."""
 
     init_tracing()
+    if not _TRACING_OK:
+        with nullcontext(None) as s:
+            yield s
+        return
     try:
         with mlflow.start_span(name=name, attributes=attributes) as s:
             yield s
     except Exception:  # pragma: no cover
-        with nullcontext() as s:
+        with nullcontext(None) as s:
             yield s
 
 
 def log_metrics(**metrics: float) -> None:
     init_tracing()
+    if not _TRACING_OK:
+        return
     for k, v in metrics.items():
         try:
             mlflow.log_metric(k, float(v))
@@ -110,6 +144,8 @@ def log_metrics(**metrics: float) -> None:
 
 def log_text(content: str, artifact_file: str) -> None:
     init_tracing()
+    if not _TRACING_OK:
+        return
     try:
         mlflow.log_text(content, artifact_file)
     except Exception:
