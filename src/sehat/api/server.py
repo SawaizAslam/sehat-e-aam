@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from ..config import get_settings
@@ -80,6 +81,74 @@ def _load_gold_row(facility_id: str) -> pd.Series | None:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
+
+_LANDING_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sehat-e-Aam · API</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 720px; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.55;
+  }
+  h1 { margin-bottom: .25rem; }
+  .tag { color: #888; font-size: .9rem; margin-bottom: 2rem; }
+  code, pre { background: rgba(127,127,127,.12); border-radius: 6px; padding: .15rem .4rem; }
+  pre { padding: 1rem; overflow-x: auto; }
+  .endpoints { display: grid; grid-template-columns: 5rem 1fr; gap: .35rem 1rem; margin: 1rem 0; }
+  .method { font-weight: 600; }
+  .ok    { color: #1a7f37; }
+  .post  { color: #6f42c1; }
+  a { color: #0969da; }
+  footer { margin-top: 3rem; font-size: .85rem; color: #888; }
+</style>
+</head>
+<body>
+  <h1>Sehat-e-Aam · Healthcare Intelligence API</h1>
+  <p class="tag">FastAPI mirror, public CORS, LLM via Databricks Foundation Model API.</p>
+
+  <p>
+    <a href="/docs"><strong>Open Swagger UI &rarr;</strong></a>
+    &nbsp;·&nbsp;
+    <a href="/health">/health</a>
+    &nbsp;·&nbsp;
+    <a href="/openapi.json">openapi.json</a>
+  </p>
+
+  <h2>Endpoints</h2>
+  <div class="endpoints">
+    <span class="method ok">GET</span>   <code>/health</code>
+    <span class="method post">POST</span><code>/api/query</code>
+    <span class="method ok">GET</span>   <code>/api/facility/{facility_id}</code>
+    <span class="method ok">GET</span>   <code>/api/facility/{facility_id}/trust</code>
+    <span class="method ok">GET</span>   <code>/api/deserts</code>
+  </div>
+
+  <h2>Quick example</h2>
+<pre>fetch("/api/query", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    query: "ICU and dialysis in Lucknow",
+    top_k: 5
+  })
+}).then(r =&gt; r.json())</pre>
+
+  <footer>
+    Source: <a href="https://github.com/SawaizAslam/sehat-e-aam">github.com/SawaizAslam/sehat-e-aam</a>
+  </footer>
+</body>
+</html>
+"""
+
+
+@app.get("/", include_in_schema=False)
+def root() -> HTMLResponse:
+    return HTMLResponse(_LANDING_PAGE)
 
 
 @app.get("/health")
