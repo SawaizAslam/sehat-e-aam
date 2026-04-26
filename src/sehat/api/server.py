@@ -154,8 +154,17 @@ def root() -> HTMLResponse:
 @app.get("/health")
 def health() -> dict[str, Any]:
     s = get_settings()
+    row_count = 0
+    if parquet_exists(s.gold_path):
+        try:
+            with duck(s) as con:
+                row_count = int(con.execute("SELECT COUNT(*) FROM gold").fetchone()[0])
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully on health check
+            LOGGER.warning("Failed to count gold rows for /health: %s", exc)
     return {
         "status": "ok",
+        "row_count": row_count,
+        "embedding_model": s.embedding_model,
         "bronze_ready": parquet_exists(s.bronze_path),
         "silver_ready": parquet_exists(s.silver_path),
         "gold_ready": parquet_exists(s.gold_path),
@@ -169,7 +178,7 @@ def health() -> dict[str, Any]:
 
 @app.post("/api/query")
 def api_query_facilities(req: QueryRequest) -> dict[str, Any]:
-    return query_facilities(
+    response = query_facilities(
         user_query=req.query,
         state_filter=req.state,
         city_filter=req.city,
@@ -177,6 +186,65 @@ def api_query_facilities(req: QueryRequest) -> dict[str, Any]:
         min_trust_score=req.min_trust_score,
         top_k_final=req.top_k,
     )
+    _enrich_ranked_results(response)
+    return response
+
+
+def _enrich_ranked_results(response: dict[str, Any]) -> None:
+    """Mutate ``response['ranked_results']`` so each item includes a ``facility_meta``
+    block with location, coordinates, trust score and trust flags from the Gold
+    table. This lets the public web frontend render full result cards (map,
+    trust badge, breakdown) without an N+1 round-trip per result.
+    """
+    results = response.get("ranked_results") or []
+    if not results:
+        return
+
+    s = get_settings()
+    if not parquet_exists(s.gold_path):
+        LOGGER.warning("Gold parquet missing; skipping result enrichment.")
+        return
+
+    facility_ids = [r["facility_id"] for r in results if r.get("facility_id")]
+    if not facility_ids:
+        return
+
+    placeholders = ", ".join(["?"] * len(facility_ids))
+    sql = f"""
+        SELECT facility_id, name, address_city, address_state, address_zip,
+               latitude, longitude, facility_type, operator_type, trust_score,
+               trust_flags_json
+        FROM gold
+        WHERE facility_id IN ({placeholders})
+    """
+    with duck(s) as con:
+        df = con.execute(sql, facility_ids).df()
+
+    meta_by_id: dict[str, dict[str, Any]] = {}
+    for _, row in df.iterrows():
+        try:
+            trust_flags = json.loads(row["trust_flags_json"]) if row.get("trust_flags_json") else []
+        except (TypeError, ValueError):
+            trust_flags = []
+        trust_score = float(row["trust_score"]) if pd.notna(row.get("trust_score")) else 0.0
+        meta_by_id[str(row["facility_id"])] = {
+            "name": row["name"],
+            "city": row.get("address_city"),
+            "state": row.get("address_state"),
+            "pin_code": row.get("address_zip"),
+            "latitude": float(row["latitude"]) if pd.notna(row.get("latitude")) else None,
+            "longitude": float(row["longitude"]) if pd.notna(row.get("longitude")) else None,
+            "facility_type": row.get("facility_type"),
+            "operator_type": row.get("operator_type"),
+            "trust_score": trust_score,
+            "trust_grade": _trust_grade(trust_score),
+            "trust_flags": trust_flags,
+        }
+
+    for result in results:
+        meta = meta_by_id.get(str(result.get("facility_id")))
+        if meta is not None:
+            result["facility_meta"] = meta
 
 
 @app.get("/api/facility/{facility_id}/trust")
